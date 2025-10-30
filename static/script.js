@@ -1,7 +1,136 @@
+
+// Debug helper function
+function debugLog(message, data = null, level = 'info') {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+  
+  switch(level) {
+    case 'error':
+      console.error(logMessage, data || '');
+      break;
+    case 'warn':
+      console.warn(logMessage, data || '');
+      break;
+    default:
+      console.log(logMessage, data || '');
+  }
+  
+  // Also display critical errors in UI
+  if (level === 'error') {
+    displayError(message, data);
+  }
+}
+
+// Display error in UI
+function displayError(message, details) {
+  const errorContent = document.getElementById('debug-content');
+  const errorPanel = document.getElementById('debug-panel');
+  if (errorContent && errorPanel) {
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'debug-error';
+    errorDiv.innerHTML = `
+      <strong>Error:</strong> ${message}
+      ${details ? `<br><small>${JSON.stringify(details)}</small>` : ''}
+      <span class="debug-time">${new Date().toLocaleTimeString()}</span>
+    `;
+    errorContent.appendChild(errorDiv);
+    errorPanel.style.display = 'block';
+    
+    // Auto-hide after 10 seconds
+    setTimeout(() => {
+      errorDiv.style.opacity = '0';
+      setTimeout(() => errorDiv.remove(), 500);
+    }, 10000);
+  } else {
+    console.error('Debug panel not found:', message, details);
+  }
+}
+
+// Display debug info in UI
+function displayDebug(message, level = 'info') {
+  const debugContent = document.getElementById('debug-content');
+  const debugPanel = document.getElementById('debug-panel');
+  if (debugContent && debugPanel) {
+    const debugDiv = document.createElement('div');
+    debugDiv.style.color = level === 'error' ? '#ff6666' : '#0f0';
+    debugDiv.innerHTML = `
+      [${level.toUpperCase()}] ${message}
+      <span class="debug-time">${new Date().toLocaleTimeString()}</span>
+    `;
+    debugContent.appendChild(debugDiv);
+    debugPanel.style.display = 'block';
+    
+    // Auto-hide after 5 seconds for non-errors
+    if (level !== 'error') {
+      setTimeout(() => {
+        debugDiv.style.opacity = '0';
+        setTimeout(() => debugDiv.remove(), 500);
+      }, 5000);
+    }
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+// Auto-redirect from 0.0.0.0 to localhost for microphone access
+if (window.location.hostname === '0.0.0.0') {
+  const newURL = window.location.href.replace('0.0.0.0', 'localhost');
+  window.location.replace(newURL);
+  return;
+}
+
+debugLog('Application initialized');
+
+// --- Theme Switcher Logic ---
+const themeToggleButton = document.getElementById('theme-toggle-button');
+const body = document.body;
+
+// Function to apply the saved theme
+const applyTheme = () => {
+  const savedTheme = localStorage.getItem('chirp-theme');
+  if (savedTheme === 'dark') {
+    body.classList.add('dark-mode');
+  } else {
+    body.classList.remove('dark-mode');
+  }
+};
+
+// Function to toggle the theme
+const toggleTheme = () => {
+  body.classList.toggle('dark-mode');
+  // Save the new theme preference
+  if (body.classList.contains('dark-mode')) {
+    localStorage.setItem('chirp-theme', 'dark');
+  } else {
+    localStorage.setItem('chirp-theme', 'light');
+  }
+};
+
+// Add event listener to the button
+if (themeToggleButton) {
+  themeToggleButton.addEventListener('click', toggleTheme);
+}
+
+// Apply the theme on initial load
+applyTheme();
+
+// Test API connection on load
+  fetch('/api/status')
+    .then(response => response.json())
+    .then(data => {
+      debugLog('API Status Check:', data);
+      displayDebug(`API Status: ${data.status}, TTS: ${data.tts_client}, Speech: ${data.speech_client}`);
+      if (!data.tts_client || !data.speech_client) {
+        displayError('Google Cloud clients not initialized', data);
+      }
+    })
+    .catch(err => {
+      debugLog('Failed to check API status', err, 'error');
+      displayError('Cannot connect to API - is the server running?', err);
+    });
+  
   // --- High Score Logic ---
   const HIGH_SCORES_KEY = "chirp-high-scores-v2";
-  const MAX_HIGH_SCORES = 10;
+  const MAX_HIGH_SCORES = 5;
 
   const HIGH_SCORES_KEY_LEARNING = "chirp-high-scores-learning";
 
@@ -12,7 +141,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return JSON.parse(scoresJSON);
       }
     } catch (e) {
-      console.error("Could not parse high scores from localStorage", e);
+      debugLog("Could not parse high scores from localStorage", e, 'error');
       return getDefaultHighScores(); // Fallback
     }
     return getDefaultHighScores();
@@ -22,7 +151,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       localStorage.setItem(HIGH_SCORES_KEY, JSON.stringify(scores));
     } catch (e) {
-      console.error("Could not save high scores to localStorage", e);
+      debugLog("Could not save high scores to localStorage", e, 'error');
     }
   }
 
@@ -30,7 +159,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       localStorage.setItem(HIGH_SCORES_KEY_LEARNING, JSON.stringify(scores));
     } catch (e) {
-      console.error("Could not save high scores to localStorage", e);
+      debugLog("Could not save high scores to localStorage", e, 'error');
     }
   }
 
@@ -41,7 +170,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return JSON.parse(scoresJSON);
       }
     } catch (error) {
-      console.error("Could not parse high scores from localStorage", e);
+      debugLog("Could not parse learning high scores from localStorage", error, 'error');
       return getDefaultHighScores(); // Fallback
     }
     return getDefaultHighScores();
@@ -105,6 +234,30 @@ document.addEventListener("DOMContentLoaded", () => {
   // Display scores on initial load
   displayHighScores();
   displayHighScoresLearning();
+
+  // Reset button for Singing Contest scores
+  const resetSingingScoresBtn = document.getElementById('reset-singing-scores');
+  if (resetSingingScoresBtn) {
+    resetSingingScoresBtn.addEventListener('click', () => {
+      if (confirm('Are you sure you want to reset all singing contest scores? This cannot be undone.')) {
+        localStorage.removeItem(HIGH_SCORES_KEY);
+        displayHighScores();
+        debugLog('Singing contest scores reset', null, 'info');
+      }
+    });
+  }
+
+  // Reset button for Language Learning scores
+  const resetLearningScoresBtn = document.getElementById('reset-learning-scores');
+  if (resetLearningScoresBtn) {
+    resetLearningScoresBtn.addEventListener('click', () => {
+      if (confirm('Are you sure you want to reset all language learning scores? This cannot be undone.')) {
+        localStorage.removeItem(HIGH_SCORES_KEY_LEARNING);
+        displayHighScoresLearning();
+        debugLog('Language learning scores reset', null, 'info');
+      }
+    });
+  }
 
   // --- Modal Logic ---
   const modal = document.getElementById("highscore-modal");
@@ -237,6 +390,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   function normalizeText(text) {
+    if (typeof text !== 'string') {
+      return '';
+    }
     return text
       .toLowerCase()
       .replace(/[^\w\s]/g, "")
@@ -255,165 +411,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const songRefrains = {
     aranha: {
       time: 18,
-      language: "pt-BR",
-      text: `A dona aranha subiu pela parede\nVeio a chuva forte e a derrubou\nJá passou a chuva e o sol já vai surgindo\nE a dona aranha continua a subir`,
-      words: processWords([
-        {
-          startOffset: "0.800s",
-          endOffset: "1.200s",
-          word: "A",
-        },
-        {
-          startOffset: "1.240s",
-          endOffset: "1.680s",
-          word: "dona",
-        },
-        {
-          startOffset: "1.680s",
-          endOffset: "2.440s",
-          word: "aranha",
-        },
-        {
-          startOffset: "2.440s",
-          endOffset: "2.960s",
-          word: "subiu",
-        },
-        {
-          startOffset: "2.960s",
-          endOffset: "3.440s",
-          word: "pela",
-        },
-        {
-          startOffset: "3.440s",
-          endOffset: "4.440s",
-          word: "parede,",
-        },
-        {
-          startOffset: "4.760s",
-          endOffset: "5.080s",
-          word: "veio",
-        },
-        {
-          startOffset: "5.080s",
-          endOffset: "5.160s",
-          word: "a",
-        },
-        {
-          startOffset: "5.160s",
-          endOffset: "5.640s",
-          word: "chuva",
-        },
-        {
-          startOffset: "5.640s",
-          endOffset: "6.880s",
-          word: "forte",
-        },
-        {
-          startOffset: "6.880s",
-          endOffset: "7.040s",
-          word: "e",
-        },
-        {
-          startOffset: "7.040s",
-          endOffset: "7.160s",
-          word: "a",
-        },
-        {
-          startOffset: "7.160s",
-          endOffset: "7.960s",
-          word: "derrubou.",
-        },
-        {
-          startOffset: "8.720s",
-          endOffset: "8.880s",
-          word: "Já",
-        },
-        {
-          startOffset: "8.880s",
-          endOffset: "9.480s",
-          word: "passou",
-        },
-        {
-          startOffset: "9.480s",
-          endOffset: "9.560s",
-          word: "a",
-        },
-        {
-          startOffset: "9.560s",
-          endOffset: "10.480s",
-          word: "chuva",
-        },
-        {
-          startOffset: "10.480s",
-          endOffset: "10.520s",
-          word: "e",
-        },
-        {
-          startOffset: "10.520s",
-          endOffset: "10.560s",
-          word: "o",
-        },
-        {
-          startOffset: "10.760s",
-          endOffset: "10.960s",
-          word: "sol",
-        },
-        {
-          startOffset: "10.960s",
-          endOffset: "11.160s",
-          word: "já",
-        },
-        {
-          startOffset: "11.160s",
-          endOffset: "11.360s",
-          word: "vai",
-        },
-        {
-          startOffset: "11.360s",
-          endOffset: "12.400s",
-          word: "surgindo",
-        },
-        {
-          startOffset: "12.800s",
-          endOffset: "13.040s",
-          word: "e",
-        },
-        {
-          startOffset: "13.040s",
-          endOffset: "13.160s",
-          word: "a",
-        },
-        {
-          startOffset: "13.160s",
-          endOffset: "13.600s",
-          word: "dona",
-        },
-        {
-          startOffset: "13.600s",
-          endOffset: "14.160s",
-          word: "aranha",
-        },
-        {
-          startOffset: "14.160s",
-          endOffset: "15.280s",
-          word: "continua",
-        },
-        {
-          startOffset: "15.280s",
-          endOffset: "15.400s",
-          word: "a",
-        },
-        {
-          startOffset: "15.400s",
-          endOffset: "16s",
-          word: "subir.",
-        },
-      ]),
+      language: "en-US",
+      text: `The lady spider climbed up the wall\nAlong came the rain and knocked her down\nThe rain has stopped and the sun is rising\nAnd the lady spider continues to climb`,
     },
     atirei: {
       time: 20,
-      language: "pt-BR",
-      text: `Atirei o pau no gato-to\nMas o gato-to, não morreu-reu-reu\nDona chica-ca admirou-se-se do miau\nDo miau que o gato deu - miau!`,
+      language: "en-US",
+      text: `I threw a stick at the cat-cat\nBut the cat-cat didn't die-die-die\nMrs. Chica-ca was amazed-mazed by the meow\nThe meow that the cat gave - meow!`,
       words: processWords([
         {
           startOffset: "1.240s",
@@ -564,8 +568,8 @@ document.addEventListener("DOMContentLoaded", () => {
     },
     cravo: {
       time: 21,
-      language: "pt-BR",
-      text: `O cravo brigou com a rosa\nDebaixo de uma sacada\nO cravo saiu ferido\nE a rosa, despedaçada`,
+      language: "en-US",
+      text: `The carnation fought with the rose\nUnderneath a balcony\nThe carnation was wounded\nAnd the rose was shattered`,
       words: processWords([
         {
           startOffset: "1.240s",
@@ -897,11 +901,6 @@ document.addEventListener("DOMContentLoaded", () => {
           word: "o.",
         },
         {
-          startOffset: "9.680s",
-          endOffset: "9.880s",
-          word: "With",
-        },
-        {
           startOffset: "9.880s",
           endOffset: "10.040s",
           word: "an",
@@ -1000,8 +999,8 @@ document.addEventListener("DOMContentLoaded", () => {
     },
     peixe: {
       time: 20,
-      language: "pt-BR",
-      text: `Como pode um peixe vivo\nViver fora da água fria\nComo pode um peixe vivo\nViver fora da água fria\nComo poderei viver\nComo poderei viver\nSem a tua, sem a tua\nSem a tua companhia`,
+      language: "en-US",
+      text: `How can a living fish\nLive outside of cold water\nHow can a living fish\nLive outside of cold water\nHow can I live\nHow can I live\nWithout your, without your\nWithout your company`,
       words: processWords([
         { endOffset: "1.040s", word: "Como", confidence: 0.48399335 },
         {
@@ -1183,8 +1182,8 @@ document.addEventListener("DOMContentLoaded", () => {
     },
     sapo: {
       time: 10,
-      language: "pt-BR",
-      text: `Sapo cururu, na beira do rio\nQuando o sapo canta, maninha\nÉ porque tem frio`,
+      language: "en-US",
+      text: `Cururu frog, by the riverside\nWhen the frog sings, little sister\nIt's because he's cold`,
       words: processWords([
         {
           startOffset: "0.320s",
@@ -1400,6 +1399,51 @@ document.addEventListener("DOMContentLoaded", () => {
         },
       ]),
     },
+    thunderstruck: {
+      time: 15,
+      language: "en-US",
+      text: `Thunder! Thunder! Thunder!\nThunderstruck!\nYeah yeah yeah\nThunderstruck!`,
+    },
+    sweet_child: {
+      time: 15,
+      language: "en-US",
+      text: `Sweet child o' mine\nSweet love of mine\nWhere do we go now\nWhere do we go`,
+    },
+    livin_on_a_prayer: {
+      time: 15,
+      language: "en-US",
+      text: `Whoa we're halfway there\nWhoa livin' on a prayer\nTake my hand we'll make it I swear\nWhoa livin' on a prayer`,
+    },
+    bohemian_rhapsody: {
+      time: 15,
+      language: "en-US",
+      text: `Is this the real life\nIs this just fantasy\nCaught in a landslide\nNo escape from reality`,
+    },
+    dont_stop_believin: {
+      time: 15,
+      language: "en-US",
+      text: `Don't stop believin'\nHold on to that feelin'\nStreetlight people\nDon't stop believin'`,
+    },
+    shape_of_you: {
+      time: 15,
+      language: "en-US",
+      text: `I'm in love with the shape of you\nWe push and pull like a magnet do\nAlthough my heart is falling too\nI'm in love with your body`,
+    },
+    in_the_end: {
+      time: 15,
+      language: "en-US",
+      text: `I tried so hard and got so far\nBut in the end it doesn't even matter\nI had to fall to lose it all\nBut in the end it doesn't even matter`,
+    },
+    like_a_prayer: {
+      time: 15,
+      language: "en-US",
+      text: `Like a prayer you know I'll take you there\nIt's like a dream to me\nWhen you call my name it's like a little prayer\nI'm down on my knees I wanna take you there`,
+    },
+    shake_it_off: {
+      time: 15,
+      language: "en-US",
+      text: `Cause the players gonna play play play play play\nAnd the haters gonna hate hate hate hate hate\nBaby I'm just gonna shake shake shake shake shake\nShake it off shake it off`,
+    },
     wish: {
       time: 13,
       language: "en-US",
@@ -1528,10 +1572,38 @@ document.addEventListener("DOMContentLoaded", () => {
   const captionOutput = document.getElementById("caption-output");
   const finalScoreOutput = document.getElementById("final-score-output");
   const refrainOutput = document.getElementById("refrain-output");
-  const songSelect = document.querySelector(".custom-select");
-  const songSelectTrigger = songSelect.querySelector(".select-trigger");
-  const songOptions = songSelect.querySelectorAll(".option");
-  const selectedText = songSelectTrigger.querySelector("span");
+  const countdownOverlay = document.getElementById("countdown-overlay");
+  const countdownOverlayText = document.getElementById("countdown-overlay-text");
+  
+  // Wait a bit for tabs to render, then find elements
+  const initializeSongSelect = () => {
+    const songSelect = document.querySelector("#song-select");
+    
+    if (!songSelect) {
+      console.error('Song select dropdown not found!');
+      debugLog('Song select dropdown not found! Retrying in 500ms...', null, 'warn');
+      setTimeout(initializeSongSelect, 500);
+      return;
+    }
+    
+    const songSelectTrigger = songSelect.querySelector(".select-trigger");
+    const songOptions = songSelect.querySelectorAll(".option");
+    const selectedText = songSelectTrigger ? songSelectTrigger.querySelector("span") : null;
+    
+    console.log('✅ Song selection elements found:', {
+      select: !!songSelect,
+      trigger: !!songSelectTrigger,
+      options: songOptions.length,
+      selectedText: !!selectedText
+    });
+    debugLog(`Song selection elements loaded: Select=${!!songSelect}, Trigger=${!!songSelectTrigger}, Options=${songOptions.length}`, null, 'info');
+    
+    // Setup song selection dropdown
+    setupSongSelection(songSelect, songSelectTrigger, songOptions, selectedText);
+  };
+  
+  // Initialize after a short delay to ensure DOM is ready
+  setTimeout(initializeSongSelect, 100);
 
   // Timer and Progress Bar elements
   const countdownText = document.getElementById("countdown-text");
@@ -1539,57 +1611,204 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Timer variables
   let countdownInterval;
+  let preRecordingCountdownInterval;
   let recordingDuration = 15; // Default duration
   let currentSongKey = null; // To hold the currently selected song key
+  let timingGuideEnabled = true; // Default to enabled
+  let timingGuideInterval = null;
+  let recordingStartTime = null;
 
   // By default, the button is disabled.
-  captionButton.disabled = true;
+  if (captionButton) {
+    captionButton.disabled = true;
+  }
 
-  songSelectTrigger.addEventListener("click", () => {
-    songSelect.classList.toggle("open");
-  });
-
-  songOptions.forEach((option) => {
-    option.addEventListener("click", () => {
-      // Remove selected class from any previously selected option
-      songOptions.forEach((opt) => opt.classList.remove("selected"));
-
-      // Add selected class to the clicked option
-      option.classList.add("selected");
-
-      // Update the trigger text and stored value
-      selectedText.textContent = option.textContent;
-      songSelect.dataset.value = option.dataset.value;
-      currentSongKey = option.dataset.value; // Update the current song key
-
-      const songData = songRefrains[currentSongKey];
-
-      // Set the recording duration and update UI
-      recordingDuration = songData.time || 15;
-      countdownText.textContent = recordingDuration;
-
-      // Update the refrain text display
-      if (songData && songData.text) {
-        refrainOutput.textContent = songData.text;
-        refrainOutput.classList.add("visible");
-      } else {
-        refrainOutput.classList.remove("visible");
-      }
-
-      // Enable the button
-      captionButton.disabled = false;
-
-      // Close the dropdown
-      songSelect.classList.remove("open");
-    });
-  });
-
-  // Close the dropdown if clicking outside of it
-  window.addEventListener("click", (e) => {
-    if (!songSelect.contains(e.target)) {
-      songSelect.classList.remove("open");
+  // Load timing guide preference from localStorage
+  const timingGuideToggle = document.getElementById('timing-guide-toggle');
+  if (timingGuideToggle) {
+    const savedPreference = localStorage.getItem('chirp-timing-guide');
+    if (savedPreference !== null) {
+      timingGuideEnabled = savedPreference === 'true';
+      timingGuideToggle.checked = timingGuideEnabled;
     }
-  });
+    
+    timingGuideToggle.addEventListener('change', (e) => {
+      timingGuideEnabled = e.target.checked;
+      localStorage.setItem('chirp-timing-guide', timingGuideEnabled);
+      debugLog(`Timing guide ${timingGuideEnabled ? 'enabled' : 'disabled'}`);
+      
+      // Refresh the refrain display if a song is selected
+      if (currentSongKey) {
+        updateRefrainDisplay();
+      }
+    });
+  }
+
+  // Function to update refrain display with or without highlighting
+  function updateRefrainDisplay() {
+    if (!currentSongKey || !refrainOutput) return;
+    
+    const songData = songRefrains[currentSongKey];
+    if (!songData || !songData.text) {
+      refrainOutput.classList.remove('visible');
+      return;
+    }
+
+    const lines = songData.text.split('\n');
+    
+    if (timingGuideEnabled && songData.time) {
+      // Show with highlighting capability
+      refrainOutput.innerHTML = '';
+      refrainOutput.classList.add('with-highlighting');
+      
+      const duration = songData.time;
+      const timePerLine = duration / lines.length;
+      
+      lines.forEach((line, index) => {
+        const lineSpan = document.createElement('div');
+        lineSpan.className = 'lyric-line';
+        lineSpan.dataset.index = index;
+        lineSpan.dataset.startTime = (index * timePerLine).toFixed(1);
+        lineSpan.dataset.endTime = ((index + 1) * timePerLine).toFixed(1);
+        lineSpan.textContent = line;
+        
+        refrainOutput.appendChild(lineSpan);
+      });
+    } else {
+      // Show plain text
+      refrainOutput.textContent = songData.text;
+      refrainOutput.classList.remove('with-highlighting');
+    }
+    
+    refrainOutput.classList.add('visible');
+  }
+
+  // Function to highlight the current line being sung (karaoke style)
+  function highlightCurrentLine(elapsedSeconds) {
+    if (!timingGuideEnabled || !currentSongKey) {
+      debugLog(`Highlighting skipped: enabled=${timingGuideEnabled}, song=${currentSongKey}`, null, 'warn');
+      return;
+    }
+    
+    const lyricLines = refrainOutput.querySelectorAll('.lyric-line');
+    if (lyricLines.length === 0) {
+      debugLog('No lyric lines found for highlighting', null, 'warn');
+      return;
+    }
+    
+    // Only log every second to avoid spam
+    if (Math.floor(elapsedSeconds * 10) % 10 === 0) {
+      debugLog(`Highlighting at ${elapsedSeconds.toFixed(1)}s with ${lyricLines.length} lines`);
+    }
+    
+    lyricLines.forEach((line, index) => {
+      const startTime = parseFloat(line.dataset.startTime);
+      const endTime = parseFloat(line.dataset.endTime);
+      
+      line.classList.remove('current', 'sung');
+      
+      if (elapsedSeconds >= startTime && elapsedSeconds < endTime) {
+        line.classList.add('current');
+        debugLog(`Line ${index} CURRENT (${startTime}s-${endTime}s) at ${elapsedSeconds.toFixed(1)}s`);
+      } else if (elapsedSeconds >= endTime) {
+        line.classList.add('sung');
+      }
+    });
+  }
+
+  // Function to setup song selection (called after elements are found)
+  function setupSongSelection(songSelect, songSelectTrigger, songOptions, selectedText) {
+    console.log('🎵 Setting up song selection event listeners...');
+    
+    if (songSelectTrigger) {
+      songSelectTrigger.addEventListener("click", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('🎵 Song dropdown trigger clicked!');
+        debugLog('Song dropdown clicked', null, 'info');
+        displayDebug('Dropdown clicked');
+        songSelect.classList.toggle("open");
+        console.log('Dropdown open state:', songSelect.classList.contains('open'));
+      }, true); // Use capture phase
+      console.log('✅ Click listener added to song select trigger');
+    } else {
+      console.error('❌ Song select trigger not found - cannot add click handler');
+    }
+
+    if (songOptions && songOptions.length > 0) {
+      songOptions.forEach((option, index) => {
+        option.addEventListener("click", function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log(`🎵 Song option clicked: ${option.dataset.value}`);
+          debugLog(`Song selected: ${option.dataset.value}`, null, 'info');
+          displayDebug(`Selected: ${option.textContent.trim()}`);
+
+          // --- AGGRESSIVE CLEANUP ---
+          // Force stop any previous recording state before starting a new one.
+          stopRecordingTimer();
+          if (preRecordingCountdownInterval) {
+            clearInterval(preRecordingCountdownInterval);
+            preRecordingCountdownInterval = null;
+          }
+          if (socket && socket.readyState !== WebSocket.CLOSED) {
+            socket.close();
+          }
+          if (captionButton) {
+            captionButton.textContent = start_singing;
+            captionButton.disabled = true; // Will be re-enabled shortly
+          }
+          // --- END CLEANUP ---
+          
+          // Remove selected class from any previously selected option
+          songOptions.forEach((opt) => opt.classList.remove("selected"));
+
+          // Add selected class to the clicked option
+          option.classList.add("selected");
+
+          // Update the trigger text and stored value
+          if (selectedText) {
+            selectedText.textContent = option.textContent.trim();
+          }
+          if (songSelect) {
+            songSelect.dataset.value = option.dataset.value;
+          }
+          currentSongKey = option.dataset.value; // Update the current song key
+
+          const songData = songRefrains[currentSongKey];
+
+          // Set the recording duration and update UI
+          recordingDuration = songData.time || 15;
+          if (countdownText) {
+            countdownText.textContent = recordingDuration;
+          }
+
+          // Update the refrain text display with timing guide if enabled
+          updateRefrainDisplay();
+
+          // Enable the button
+          if (captionButton) {
+            captionButton.disabled = false;
+          }
+
+          // Close the dropdown
+          songSelect.classList.remove("open");
+        }, true); // Use capture phase
+      });
+      console.log(`✅ Click listeners added to ${songOptions.length} song options`);
+    } else {
+      console.error('❌ No song options found!');
+    }
+
+    // Close the dropdown if clicking outside of it
+    document.addEventListener("click", function(e) {
+      if (songSelect && !songSelect.contains(e.target)) {
+        songSelect.classList.remove("open");
+      }
+    });
+    
+    console.log('✅ Song selection setup complete!');
+  }
 
   let socket;
   let audioContext;
@@ -1667,8 +1886,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- 3. Calculate final scores (0-100) ---
 
-    // Accuracy: Percentage of correctly sung words
-    const accuracyScore = (matches / originalWords.length) * 100;
+    // Accuracy: More forgiving calculation based on matches vs. total words
+    const accuracyScore = (matches / Math.max(userWords.length, originalWords.length)) * 100;
 
     // Confidence: Average confidence of the words that were matched
     const avgConfidence = matches > 0 ? totalConfidence / matches : 0;
@@ -1784,6 +2003,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function startRecordingTimer() {
     let remainingTime = recordingDuration;
+    recordingStartTime = Date.now();
 
     const updateTimer = () => {
       countdownText.textContent = remainingTime;
@@ -1805,155 +2025,268 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     }, 1000);
+    
+    // Update lyric highlighting every 50ms (faster, more responsive) if timing guide is enabled
+    debugLog(`Checking highlighting conditions: enabled=${timingGuideEnabled}, song=${currentSongKey}`);
+    if (timingGuideEnabled && currentSongKey) {
+      debugLog('Starting lyric highlighting timer');
+      timingGuideInterval = setInterval(() => {
+        const elapsedSeconds = (Date.now() - recordingStartTime) / 1000;
+        highlightCurrentLine(elapsedSeconds);
+      }, 50); // Changed from 100ms to 50ms for more responsive highlighting
+    } else {
+      debugLog(`Lyric highlighting NOT started: enabled=${timingGuideEnabled}, song=${currentSongKey}`, null, 'warn');
+    }
   }
 
   function stopRecordingTimer() {
-    clearInterval(countdownInterval);
-    progressBar.style.width = "100%"; // Reset for next time
-    countdownText.textContent = recordingDuration;
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+      debugLog('Recording timer cleared.', null, 'warn');
+    }
+    if (timingGuideInterval) {
+      clearInterval(timingGuideInterval);
+      timingGuideInterval = null;
+    }
+    
+    // Reset all lyric highlighting
+    if (refrainOutput) {
+      const lyricLines = refrainOutput.querySelectorAll('.lyric-line');
+      lyricLines.forEach(line => {
+        line.classList.remove('current', 'sung');
+      });
+    }
+    
+    if(progressBar) progressBar.style.width = "100%"; // Reset for next time
+    if(countdownText) countdownText.textContent = recordingDuration;
+    recordingStartTime = null;
   }
 
   captionButton.addEventListener("click", async () => {
     if (captionButton.textContent === start_singing) {
-            // Hide score from previous rounds
-      finalScoreOutput.style.display = "none";
-      captionButton.disabled = true; // Disable button during countdown
-      let countdown = 3;
-      captionOutput.textContent = `Get ready... ${countdown}`;
+      try {
+        // Hide score from previous rounds
+        finalScoreOutput.style.display = "none";
+        captionButton.disabled = true; // Disable button during countdown
+        
+        // Show overlay
+        countdownOverlay.classList.remove('hidden');
+        countdownOverlayText.textContent = "Get ready...";
 
-      const countdownInterval = setInterval(() => {
-        countdown--;
-        if (countdown > 0) {
-          captionOutput.textContent = `Get ready... ${countdown}`;
-        } else {
-          clearInterval(countdownInterval);
-          captionOutput.textContent = "Connecting...";
-          captionButton.textContent = stop_singing;
-          captionButton.disabled = false; // Re-enable button
+        let countdown = 3;
 
-          // Start the 15-second recording timer
-          startRecordingTimer();
+        // This timeout creates a small delay so "Get ready..." is visible for a moment.
+        setTimeout(() => {
+            preRecordingCountdownInterval = setInterval(() => {
+                if (countdown > 0) {
+                    countdownOverlayText.textContent = countdown;
+                    countdown--;
+                } else {
+                    clearInterval(preRecordingCountdownInterval);
+                    preRecordingCountdownInterval = null;
+                    
+                    // Hide overlay and start
+                    countdownOverlay.classList.add('hidden');
+                    captionOutput.textContent = "Sing now!";
+                    captionButton.textContent = stop_singing;
+                    captionButton.disabled = false; // Re-enable button
 
-          // --- Original logic starts here ---
-          finalTranscript = ""; // Reset transcript
-          finalWords = []; // Reset words
-          const language = songRefrains[currentSongKey]?.language || "en-US"; // Default to en-US
-          const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
-          const wsUrl = `${wsProtocol}${window.location.host}/listen?language_code=${language}`;
-          socket = new WebSocket(wsUrl);
+                    // Start the recording timer
+                    startRecordingTimer();
 
-          socket.onopen = () => {
-            captionOutput.textContent = "Connected. Please start singing.";
-            navigator.mediaDevices
-              .getUserMedia({ audio: true, video: false })
-              .then(async (stream) => {
-                globalStream = stream;
-                audioContext = new (window.AudioContext ||
-                  window.webkitAudioContext)();
+                    // Actually start recording
+                    startRecording();
+                }
+            }, 1000);
+        }, 1000); // 1 second delay for "Get ready..."
 
-                // Load the audio processor worklet
-                await audioContext.audioWorklet.addModule(
-                  "/static/audio-processor.js",
-                );
-                const workletNode = new AudioWorkletNode(
-                  audioContext,
-                  "audio-processor",
-                );
-
-                // The worklet will post messages with the processed audio buffer
-                workletNode.port.onmessage = (event) => {
-                  if (socket.readyState === WebSocket.OPEN) {
-                    // Send the Int16Array buffer from the worklet
-                    socket.send(event.data);
-                  }
-                };
-
-                input = audioContext.createMediaStreamSource(globalStream);
-                input.connect(workletNode);
-                workletNode.connect(audioContext.destination);
-              })
-              .catch((err) => {
-                console.error("Error getting audio stream:", err);
-                captionOutput.textContent =
-                  "Error: Could not access microphone. Please grant permission.";
-                captionButton.textContent = start_singing;
-              });
-          };
-
-          socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            if (data.isFinal) {
-              // Accumulate final results
-              finalTranscript += data.transcript + " ";
-              finalWords.push(...data.words);
-              captionOutput.textContent = finalTranscript;
-            } else {
-              // Display the interim transcript, appended to the final part
-              captionOutput.textContent = finalTranscript + data.transcript;
-            }
-          };
-
-          socket.onclose = () => {
-            stopRecordingTimer(); // Ensure timer is hidden on close
-            captionButton.textContent = start_singing;
-            captionButton.disabled = false; // Re-enable button
-
-            // --- Perform Scoring ---
-            const originalRefrain = songRefrains[currentSongKey];
-            if (originalRefrain && finalWords.length > 0) {
-                            const score = calculateScore(finalWords, originalRefrain);
-              checkAndSaveHighScore(score.overallScore);
-              let scoreHtml =
-                `Score: <span class="score-value">${score.overallScore}/100</span><br>` +
-                `(Accuracy: <span class="score-value">${score.accuracyScore}</span>, Confidence: <span class="score-value">${score.confidenceScore}</span>`;
-
-              if (score.timingScore !== undefined) {
-                scoreHtml += `, Timing: <span class="score-value">${score.timingScore}</span>)`;
-              } else if (score.rhythmScore !== undefined) {
-                scoreHtml += `, Rhythm: <span class="score-value">${score.rhythmScore}</span>)`;
-              } else {
-                scoreHtml += `)`;
-              }
-              captionOutput.textContent = finalTranscript;
-              finalScoreOutput.innerHTML = scoreHtml; // Use innerHTML to render spans
-              finalScoreOutput.style.display = "block"; // Show the container
-            } else {
-              captionOutput.textContent = `${finalTranscript || "No audio detected :("}`;
-            }
-          };
-
-          socket.onerror = (err) => {
-            console.error("WebSocket Error:", err);
-            captionOutput.textContent =
-              "Error: Could not connect to the server. Is it running?";
-            captionButton.textContent = start_singing;
-            captionButton.disabled = false; // Re-enable button
-          };
+      } catch (err) {
+        debugLog('Failed to start recording', err, 'error');
+        displayError('Failed to start recording', err);
+        if (preRecordingCountdownInterval) {
+            clearInterval(preRecordingCountdownInterval);
+            preRecordingCountdownInterval = null;
         }
-      }, 1000);
+        captionButton.textContent = start_singing;
+        captionButton.disabled = false;
+        stopRecordingTimer();
+        countdownOverlay.classList.add('hidden'); // Hide on error
+      }
     } else {
-      // User clicked "Stop Singing"
-      stopRecordingTimer(); // Stop and hide the timer immediately
-      captionButton.textContent = "Processing...";
-      captionButton.disabled = true;
-
-      // Stop the audio source locally
-      if (globalStream) {
-        globalStream.getTracks().forEach((track) => track.stop());
-      }
-      if (audioContext) {
-        await audioContext.close();
-      }
-
-      // Signal the server that we are done sending audio
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ action: "stop" }));
-      }
-      // Now we wait for the server to process remaining audio and close the connection.
-      // The socket.onclose event will handle the final scoring and UI reset.
+      stopRecording();
     }
   });
+  
+  function startRecording() {
+    debugLog('Starting recording...');
+    displayDebug('Starting recording...');
+    
+    // --- Original logic starts here ---
+    finalTranscript = ""; // Reset transcript
+    finalWords = []; // Reset words
+    
+    // Show caption output immediately
+    captionOutput.textContent = "";
+    captionOutput.classList.add('visible');
+    
+    const language = songRefrains[currentSongKey]?.language || "en-US"; // Default to en-US
+    const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+    const wsUrl = `${wsProtocol}${window.location.host}/listen?language_code=${language}`;
+    socket = new WebSocket(wsUrl);
+
+    socket.onopen = () => {
+      captionOutput.textContent = "🎤 Listening...";
+      
+      // Check if getUserMedia is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const currentURL = window.location.href;
+        const isLocalhost = window.location.hostname === 'localhost' ||
+                           window.location.hostname === '127.0.0.1' ||
+                           window.location.hostname === '[::1]';
+        const isHTTPS = window.location.protocol === 'https:';
+        
+        let errorMsg = "⚠️ Microphone access requires a secure connection!\n\n";
+        
+        if (!isLocalhost && !isHTTPS) {
+          errorMsg += "Current URL: " + currentURL + "\n\n";
+          errorMsg += "Please access this app via:\n";
+          errorMsg += "• http://localhost:8080 (recommended)\n";
+          errorMsg += "• http://127.0.0.1:8080\n";
+          errorMsg += "• Or set up HTTPS";
+        } else {
+          errorMsg += "Your browser doesn't support audio recording.\n";
+          errorMsg += "Please use Chrome, Firefox, or Edge.";
+        }
+        
+        captionOutput.textContent = errorMsg;
+        debugLog(errorMsg, null, 'error');
+        displayError('Microphone Access Blocked', errorMsg);
+        captionButton.textContent = start_singing;
+        captionButton.disabled = false;
+        return;
+      }
+      
+      navigator.mediaDevices
+        .getUserMedia({ audio: true, video: false })
+        .then(async (stream) => {
+          globalStream = stream;
+          audioContext = new (window.AudioContext ||
+            window
+.webkitAudioContext)();
+
+          // Load the audio processor worklet
+          await audioContext.audioWorklet.addModule(
+            "/static/audio-processor.js",
+          );
+          const workletNode = new AudioWorkletNode(
+            audioContext,
+            "audio-processor",
+          );
+
+          // The worklet will post messages with the processed audio buffer
+          workletNode.port.onmessage = (event) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              // Send the Int16Array buffer from the worklet
+              socket.send(event.data);
+            }
+          };
+
+          input = audioContext.createMediaStreamSource(globalStream);
+          input.connect(workletNode);
+          workletNode.connect(audioContext.destination);
+        })
+        .catch((err) => {
+          console.error("Error getting audio stream:", err);
+          captionOutput.textContent =
+            "Error: Could not access microphone. Please grant permission.";
+          captionButton.textContent = start_singing;
+        });
+    };
+
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.isFinal) {
+        // Accumulate final results
+        finalTranscript += data.transcript + " ";
+        finalWords.push(...data.words);
+        // Show real-time final transcript
+        captionOutput.textContent = finalTranscript.trim() || "🎤 Listening...";
+        captionOutput.classList.add('visible');
+      } else {
+        // Display the interim transcript in real-time
+        const currentText = finalTranscript + data.transcript;
+        captionOutput.textContent = currentText.trim() || "🎤 Listening...";
+        captionOutput.classList.add('visible');
+      }
+    };
+
+    socket.onclose = () => {
+      stopRecordingTimer(); // Ensure timer is hidden on close
+      captionButton.textContent = start_singing;
+      captionButton.disabled = false; // Re-enable button
+
+      // --- Show transcribed text ---
+      if (finalTranscript) {
+        captionOutput.textContent = finalTranscript;
+        captionOutput.classList.add('visible');
+      } else {
+        captionOutput.textContent = "No audio detected :(";
+        captionOutput.classList.add('visible');
+      }
+
+      // --- Perform Scoring ---
+      const originalRefrain = songRefrains[currentSongKey];
+      if (originalRefrain && finalWords.length > 0) {
+        const score = calculateScore(finalWords, originalRefrain);
+        checkAndSaveHighScore(score.overallScore);
+        let scoreHtml =
+          `Score: <span class="score-value">${score.overallScore}/100</span><br>` +
+          `(Accuracy: <span class="score-value">${score.accuracyScore}</span>, Confidence: <span class="score-value">${score.confidenceScore}</span>`;
+
+        if (score.timingScore !== undefined) {
+          scoreHtml += `, Timing: <span class="score-value">${score.timingScore}</span>)`;
+        } else if (score.rhythmScore !== undefined) {
+          scoreHtml += `, Rhythm: <span class="score-value">${score.rhythmScore}</span>)`;
+        } else {
+          scoreHtml += `)`;
+        }
+        finalScoreOutput.innerHTML = scoreHtml; // Use innerHTML to render spans
+        finalScoreOutput.style.display = "block"; // Show the container
+      }
+    };
+
+    socket.onerror = (err) => {
+      console.error("WebSocket Error:", err);
+      captionOutput.textContent =
+        "Error: Could not connect to the server. Is it running?";
+      captionButton.textContent = start_singing;
+      captionButton.disabled = false; // Re-enable button
+    };
+  }
+  
+  function stopRecording() {
+    debugLog('Stopping recording...');
+    displayDebug('Stopping recording...');
+    
+    stopRecordingTimer();
+    captionButton.textContent = "Processing...";
+    captionButton.disabled = true;
+
+    // Stop the audio source locally
+    if (globalStream) {
+      globalStream.getTracks().forEach((track) => track.stop());
+    }
+    if (audioContext) {
+      audioContext.close();
+    }
+
+    // Signal the server that we are done sending audio
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ action: "stop" }));
+    }
+  }
 
   // Game elements
   const listenBtn = document.getElementById('listen-btn');
@@ -1969,9 +2302,67 @@ document.addEventListener("DOMContentLoaded", () => {
   let roundTimerStart = 0;
   let recentRounds = [];
 
-  listenBtn.addEventListener("click", playsound);
-  checkBtn.addEventListener('click', checkAnswer);
-  playAgainBtn.addEventListener('click', resetGame);
+  if (listenBtn) {
+    listenBtn.addEventListener("click", function(e) {
+      e.preventDefault();
+      console.log('🎧 Play Phrase button clicked!');
+      debugLog('Play Phrase clicked', null, 'info');
+      displayDebug('Fetching phrase...');
+      playsound();
+    });
+    console.log('✅ Listen button initialized');
+    debugLog('Listen button initialized', null, 'info');
+  } else {
+    console.error('❌ Listen button not found - cannot add event listener');
+    debugLog('Listen button NOT FOUND', null, 'error');
+  }
+  
+  if (checkBtn) {
+    checkBtn.addEventListener('click', checkAnswer);
+  }
+  if (playAgainBtn) {
+    playAgainBtn.addEventListener('click', resetGame);
+  }
+
+  const languageSelectLearning = document.getElementById('language-select-learning');
+  let selectedLanguage = 'en-US'; // Default
+  let originalPhraseText = ''; // Store the original phrase in the selected language
+
+  // Language names for display
+  const languageNames = {
+    'en-US': 'English',
+    'ja-JP': 'Japanese',
+    'es-ES': 'Spanish',
+    'pt-BR': 'Portuguese',
+    'de-DE': 'German'
+  };
+
+  if (languageSelectLearning) {
+    const trigger = languageSelectLearning.querySelector('.select-trigger');
+    const options = languageSelectLearning.querySelectorAll('.option');
+    const selectedText = trigger.querySelector('span');
+
+    trigger.addEventListener('click', () => {
+      languageSelectLearning.classList.toggle('open');
+    });
+
+    options.forEach(option => {
+      option.addEventListener('click', () => {
+        selectedLanguage = option.dataset.value;
+        selectedText.innerHTML = option.innerHTML;
+        options.forEach(opt => opt.classList.remove('selected'));
+        option.classList.add('selected');
+        languageSelectLearning.classList.remove('open');
+        resetGame();
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!languageSelectLearning.contains(e.target)) {
+        languageSelectLearning.classList.remove('open');
+      }
+    });
+  }
 
   const levenshtein = (s1, s2) => {
       s1 = s1.toLowerCase();
@@ -1996,108 +2387,344 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   async function playsound() {
+    if (!listenBtn) {
+      console.error('Listen button not found!');
+      return;
+    }
+    
     listenBtn.disabled = true;
-    listenBtn.textContent = 'Carregando...';
+    listenBtn.textContent = 'Loading...';
 
     try {
-          const response = await fetch('/api/new-phrase');
-          if (!response.ok) throw new Error('Network response was not ok');
-          const data = await response.json();
-          currentPhrase = data.phrase;
-          synthesizeAndPlay(currentPhrase);
-      } catch (error) {
-          console.error('Error fetching new phrase:', error);
-          feedbackEl.textContent = 'Erro ao buscar frase.';
-      } finally {
-          isFetching = false;
-          listenBtn.disabled = false;
-          listenBtn.textContent = 'Ouvir a Frase';
+      console.log(`📡 API Request: GET /api/new-phrase?language=${selectedLanguage}`);
+      debugLog(`API Request: GET /api/new-phrase?language=${selectedLanguage}`, null, 'info');
+      displayDebug(`Fetching new phrase in ${selectedLanguage}...`);
+      
+      const response = await fetch(`/api/new-phrase?language=${selectedLanguage}`);
+      
+      console.log(`📡 API Response: ${response.status} ${response.statusText}`);
+      debugLog(`API Response: ${response.status} ${response.statusText}`, null, response.ok ? 'info' : 'error');
+      
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
       }
+      
+      const data = await response.json();
+      console.log('📡 Phrase received:', data.phrase);
+      debugLog(`Phrase received: "${data.phrase}"`, null, 'info');
+      
+      currentPhrase = data.phrase;
+      originalPhraseText = data.phrase; // Store the original phrase
+      await synthesizeAndPlay(currentPhrase);
+    } catch (error) {
+      console.error('❌ Error fetching new phrase:', error);
+      debugLog('Error fetching new phrase', error, 'error');
+      displayError('Failed to fetch phrase', error.message);
+      if (feedbackEl) {
+        feedbackEl.textContent = 'Error fetching phrase: ' + error.message;
+      }
+    } finally {
+      isFetching = false;
+      if (listenBtn) {
+        listenBtn.disabled = false;
+        listenBtn.textContent = 'Play Phrase';
+      }
+    }
   }
 
   async function synthesizeAndPlay(text) {
-      try {
-        const response = await fetch('/api/synthesize', {
+    try {
+      debugLog('API Request: POST /api/synthesize', { text: text.substring(0, 50) + '...', language: selectedLanguage });
+      displayDebug('Synthesizing audio...');
+      const response = await fetch('/api/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text, language: selectedLanguage }),
+      });
+      debugLog(`API Response: ${response.status} ${response.statusText}`);
+      if (!response.ok) throw new Error(`Synthesis failed: ${response.status} ${response.statusText}`);
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      debugLog('Audio blob created, size:', audioBlob.size);
+      displayDebug(`Audio ready (${audioBlob.size} bytes)`);
+      audioPlayer.src = audioUrl;
+      audioPlayer.play();
+    } catch (error) {
+      console.error('Error synthesizing audio:', error);
+      feedbackEl.textContent = 'Error generating audio.';
+    }
+  }
+
+  audioPlayer.onended = () => {
+      roundTimerStart = new Date();
+      answerInput.disabled = false;
+      checkBtn.disabled = false;
+      answerInput.focus();
+  };
+
+  async function checkAnswer() {
+      const responseTime = (new Date() - roundTimerStart) / 1000;
+      const userAnswer = answerInput.value;
+
+      const distance = levenshtein(userAnswer, currentPhrase);
+      const accuracyScore = Math.max(0, 80 - (distance * 5));
+      const timeBonus = Math.max(0, 20 - (responseTime * 2));
+      const roundScore = Math.round(accuracyScore + timeBonus);
+
+      // Get English translation if not already in English
+      let feedbackHTML = `
+          <span class="round-score">Your score: ${roundScore}</span>
+          <span class="breakdown">
+              (Accuracy: ${Math.round(accuracyScore)} + Time Bonus: ${Math.round(timeBonus)})
+          </span>
+      `;
+
+      if (selectedLanguage !== 'en-US') {
+        // Show original phrase in selected language
+        feedbackHTML += `
+          <div class="correct-phrase">
+              <strong>Original phrase (${languageNames[selectedLanguage]}):</strong> ${originalPhraseText}
+          </div>
+        `;
+        
+        // Get English translation using the translation API
+        try {
+          feedbackHTML += `
+            <div class="english-translation">
+                <strong>English meaning:</strong> <span id="translation-loading">Translating...</span>
+            </div>
+          `;
+          
+          feedbackEl.innerHTML = feedbackHTML;
+          
+          // Extract language code from selectedLanguage (e.g., "es-ES" -> "es")
+          const sourceLang = selectedLanguage.split('-')[0];
+          
+          // Request translation from backend
+          const translateResponse = await fetch('/api/translate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: text }),
-        });
-        if (!response.ok) throw new Error('Failed to synthesize audio');
-        const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        audioPlayer.src = audioUrl;
-        audioPlayer.play();
-      } catch (error) {
-        console.error('Error synthesizing audio:', error);
-        feedbackEl.textContent = 'Erro ao gerar áudio.';
-      }
-    }
-
-    audioPlayer.onended = () => {
-        roundTimerStart = new Date();
-        answerInput.disabled = false;
-        checkBtn.disabled = false;
-        answerInput.focus();
-    };
-
-    function checkAnswer() {
-        const responseTime = (new Date() - roundTimerStart) / 1000;
-        const userAnswer = answerInput.value;
-
-        const distance = levenshtein(userAnswer, currentPhrase);
-        const accuracyScore = Math.max(0, 80 - (distance * 5));
-        const timeBonus = Math.max(0, 20 - (responseTime * 2));
-        const roundScore = Math.round(accuracyScore + timeBonus);
-
-        feedbackEl.innerHTML = `
-            <span class="round-score">Sua pontuação: ${roundScore}</span>
-            <span class="breakdown">
-                (Precisão: ${Math.round(accuracyScore)} + Bônus de Tempo: ${Math.round(timeBonus)})
-            </span>
+            body: JSON.stringify({
+              text: originalPhraseText,
+              source_language: sourceLang
+            })
+          });
+          
+          if (translateResponse.ok) {
+            const translationData = await translateResponse.json();
+            // Update the translation text
+            const translationEl = document.getElementById('translation-loading');
+            if (translationEl) {
+              translationEl.textContent = translationData.translated;
+              translationEl.id = ''; // Remove the loading ID
+            }
+          } else {
+            const translationEl = document.getElementById('translation-loading');
+            if (translationEl) {
+              translationEl.textContent = '(Translation unavailable)';
+            }
+          }
+        } catch (error) {
+          console.error('Translation error:', error);
+          const translationEl = document.getElementById('translation-loading');
+          if (translationEl) {
+            translationEl.textContent = '(Translation error)';
+          }
+        }
+      } else {
+        // Already in English
+        feedbackHTML += `
+          <div class="correct-phrase">
+              <strong>Correct phrase:</strong> ${currentPhrase}
+          </div>
         `;
+        feedbackEl.innerHTML = feedbackHTML;
+      }
 
-        listenBtn.disabled = true;
-        checkBtn.disabled = true;
-        answerInput.disabled = true;
-        playAgainBtn.style.display = 'block';
+      listenBtn.disabled = true;
+      checkBtn.disabled = true;
+      answerInput.disabled = true;
+      playAgainBtn.style.display = 'block';
 
-        const scoreLearning = Math.round(accuracyScore)  + Math.round(timeBonus);
+      const scoreLearning = Math.round(accuracyScore)  + Math.round(timeBonus);
 
-        modalScoreTextLearning.textContent = `You scored ${scoreLearning} points! Enter your name to save your score.`;
-        scoreLearningInput.value = scoreLearning;
-        playerNameInputLearning.value = "";
-        modalLearning.style.display = "flex";
-        playerNameInputLearning.focus();
-    }
+      modalScoreTextLearning.textContent = `You scored ${scoreLearning} points! Enter your name to save your score.`;
+      scoreLearningInput.value = scoreLearning;
+      playerNameInputLearning.value = "";
+      modalLearning.style.display = "flex";
+      playerNameInputLearning.focus();
+  }
 
-    function resetGame() {
-        feedbackEl.innerHTML = '';
-        answerInput.value = '';
-        playAgainBtn.style.display = 'none';
-        listenBtn.disabled = false;
-    }
-
-
-    /* Call Analysis Logic */
-
-    document.getElementById('analyze-sentiment-button').addEventListener('click', function() {
-    var analysisContainer = document.getElementById('analysis-container');
-    var loadingSpinner = document.getElementById('loading-spinner');
-    var analysisMessage = document.getElementById('analysis-message');
-    var analyzeButton = document.getElementById('analyze-sentiment-button');
-    var analysisTable = document.getElementById('analysis-table');
+  function resetGame() {
+      feedbackEl.innerHTML = '';
+      answerInput.value = '';
+      playAgainBtn.style.display = 'none';
+      listenBtn.disabled = false;
+  }
 
 
-    // Hide button and show loading spinner
-    analyzeButton.style.display = 'none';
-    analysisContainer.style.display = 'block';
-    loadingSpinner.style.display = 'block';
-    analysisMessage.style.display = 'none';
+  /* Call Analysis Logic */
 
-    setTimeout(function() {
-      // Hide loading spinner and show message
-      loadingSpinner.style.display = 'none';
-      analysisTable.style.display = 'block';
-    }, 4000); 
+  // Translation data for different languages
+  const translations = {
+    en: [
+      "My name is Bruno, good morning. How can I help you?",
+      "Good morning. I'm calling because my bill came with 50 reais in additional services that I didn't contract, and to make it worse, I traveled to Santos and Belo Horizonte last week and had no signal at all, it's absurd.",
+      "I perfectly understand your frustration, ma'am. I apologize for the inconvenience. Just a moment, please, I'll check your account.",
+      "Hmm.",
+      "Right, I found it here. There was indeed a billing error and we registered instability in the coverage of those regions.",
+      "And so?",
+      "I've already reversed the amount charged incorrectly and for the service failure, I'm applying a 40% discount on your next bill as compensation right now. Is that okay?",
+      "Wow, 40%? Perfect, that's great. Resolved then, thank you very much.",
+      "I thank you for the contact. Have a great day."
+    ],
+    es: [
+      "Mi nombre es Bruno, buenos días. ¿En qué puedo ayudarle?",
+      "Buenos días. Llamo porque mi factura vino con 50 reales en servicios adicionales que no contraté, y para empeorar, viajé a Santos y Belo Horizonte la semana pasada y no tuve señal, es absurdo.",
+      "Entiendo perfectamente su frustración, señora. Le pido disculpas por las molestias. Un momento, por favor, verificaré su cuenta.",
+      "Hmm.",
+      "Bien, lo encontré aquí. Efectivamente hubo un error de facturación y registramos inestabilidad en la cobertura de esas regiones.",
+      "¿Y entonces?",
+      "Ya he revertido el monto cobrado incorrectamente y por la falla del servicio, estoy aplicando un descuento del 40% en su próxima factura como compensación ahora mismo. ¿Le parece bien?",
+      "¡Vaya, 40%! Perfecto, así sí. Resuelto entonces, muchas gracias.",
+      "Yo le agradezco el contacto. Que tenga un excelente día."
+    ],
+    fr: [
+      "Je m'appelle Bruno, bonjour. Comment puis-je vous aider?",
+      "Bonjour. J'appelle parce que ma facture est venue avec 50 reais de services supplémentaires que je n'ai pas contractés, et pour aggraver les choses, j'ai voyagé à Santos et Belo Horizonte la semaine dernière et je n'avais aucun signal, c'est absurde.",
+      "Je comprends parfaitement votre frustration, madame. Je m'excuse pour le désagrément. Un instant, s'il vous plaît, je vais vérifier votre compte.",
+      "Hmm.",
+      "D'accord, je l'ai trouvé ici. Il y a effectivement eu une erreur de facturation et nous avons enregistré une instabilité de la couverture dans ces régions.",
+      "Et alors?",
+      "J'ai déjà annulé le montant facturé incorrectement et pour la panne de service, j'applique maintenant une réduction de 40% sur votre prochaine facture en compensation. Cela vous convient-il?",
+      "Wow, 40%? Parfait, c'est génial. Résolu alors, merci beaucoup.",
+      "Je vous remercie du contact. Passez une excellente journée."
+    ],
+    de: [
+      "Mein Name ist Bruno, guten Morgen. Wie kann ich Ihnen helfen?",
+      "Guten Morgen. Ich rufe an, weil meine Rechnung 50 Reais für zusätzliche Dienste enthielt, die ich nicht beauftragt habe, und um es noch schlimmer zu machen, bin ich letzte Woche nach Santos und Belo Horizonte gereist und hatte überhaupt kein Signal, das ist absurd.",
+      "Ich verstehe Ihre Frustration vollkommen, gnädige Frau. Ich entschuldige mich für die Unannehmlichkeiten. Einen Moment bitte, ich werde Ihr Konto überprüfen.",
+      "Hmm.",
+      "Richtig, ich habe es hier gefunden. Es gab tatsächlich einen Abrechnungsfehler und wir haben Instabilität in der Abdeckung dieser Regionen registriert.",
+      "Und dann?",
+      "Ich habe den falsch berechneten Betrag bereits rückerstattet und für den Serviceausfall gewähre ich Ihnen jetzt sofort einen Rabatt von 40% auf Ihre nächste Rechnung als Entschädigung. Ist das in Ordnung?",
+      "Wow, 40%? Perfekt, das ist großartig. Dann gelöst, vielen Dank.",
+      "Ich danke Ihnen für den Kontakt. Haben Sie einen schönen Tag."
+    ],
+    it: [
+      "Mi chiamo Bruno, buongiorno. Come posso aiutarla?",
+      "Buongiorno. Chiamo perché la mia fattura è arrivata con 50 reais di servizi aggiuntivi che non ho contrattato, e per peggiorare le cose, ho viaggiato a Santos e Belo Horizonte la settimana scorsa e non avevo alcun segnale, è assurdo.",
+      "Capisco perfettamente la sua frustrazione, signora. Mi scuso per l'inconveniente. Solo un momento, per favore, controllerò il suo account.",
+      "Hmm.",
+      "Giusto, l'ho trovato qui. C'è stato effettivamente un errore di fatturazione e abbiamo registrato instabilità nella copertura di quelle regioni.",
+      "E allora?",
+      "Ho già stornato l'importo addebitato in modo errato e per il guasto del servizio, sto applicando ora uno sconto del 40% sulla sua prossima fattura come compensazione. Va bene?",
+      "Wow, 40%? Perfetto, è fantastico. Risolto allora, grazie mille.",
+      "La ringrazio per il contatto. Buona giornata."
+    ],
+    ja: [
+      "私の名前はブルーノです、おはようございます。どのようにお手伝いできますか？",
+      "おはようございます。契約していない追加サービスに50レアルの請求があったので電話しています。さらに悪いことに、先週サントスとベロオリゾンテに旅行したのですが、まったく信号がありませんでした。ばかげています。",
+      "お客様のご不満は十分に理解しております。ご不便をおかけして申し訳ございません。少々お待ちください、お客様のアカウントを確認いたします。",
+      "うーん。",
+      "はい、こちらで見つかりました。確かに請求エラーがあり、それらの地域でのカバレッジの不安定性を記録しました。",
+      "それで？",
+      "誤って請求された金額はすでに返金しました。そして、サービス障害に対する補償として、次回の請求書に40％の割引を適用しています。よろしいですか？",
+      "えっ、40%？完璧です、素晴らしいです。それでは解決ですね、どうもありがとうございます。",
+      "ご連絡ありがとうございました。良い一日をお過ごしください。"
+    ],
+    zh: [
+      "我叫布鲁诺，早上好。我能帮您什么？",
+      "早上好。我打电话是因为我的账单中有50雷亚尔的额外服务费用，而这些服务我并没有订购。更糟糕的是，上周我去了桑托斯和贝洛奥里藏特，完全没有信号，太荒谬了。",
+      "我完全理解您的沮丧，女士。对于给您带来的不便，我深表歉意。请稍等，我来查看您的账户。",
+      "嗯。",
+      "好的，我在这里找到了。确实存在计费错误，我们记录了这些地区的覆盖不稳定。",
+      "然后呢？",
+      "我已经退还了错误收取的金额，作为服务故障的补偿，我现在正在为您的下一张账单申请40%的折扣。可以吗？",
+      "哇，40%？太好了，这样就好。那就解决了，非常感谢。",
+      "感谢您的联系。祝您有美好的一天。"
+    ],
+    ko: [
+      "제 이름은 브루노입니다, 좋은 아침입니다. 어떻게 도와드릴까요?",
+      "좋은 아침입니다. 제가 계약하지 않은 추가 서비스에 50헤알이 청구되어 전화드렸습니다. 더 나쁜 것은 지난주에 산투스와 벨루오리존치를 여행했는데 전혀 신호가 없었습니다. 말도 안 됩니다.",
+      "고객님의 불만을 완전히 이해합니다. 불편을 끼쳐 드려 죄송합니다. 잠시만 기다려 주십시오, 계정을 확인하겠습니다.",
+      "음.",
+      "네, 여기서 찾았습니다. 실제로 청구 오류가 있었고 해당 지역의 커버리지 불안정성을 기록했습니다.",
+      "그래서요?",
+      "이미 잘못 청구된 금액을 환불했으며, 서비스 장애에 대한 보상으로 지금 바로 다음 청구서에 40% 할인을 적용하고 있습니다. 괜찮으신가요?",
+      "와, 40%요? 완벽해요, 정말 좋네요. 그럼 해결됐네요, 정말 감사합니다.",
+      "연락 주셔서 감사합니다. 좋은 하루 보내세요."
+    ]
+  };
+
+  let currentTranslationLanguage = 'en';
+
+  // Setup translation language selector
+  const translationLanguageSelect = document.getElementById('translation-language-select');
+  if (translationLanguageSelect) {
+    const trigger = translationLanguageSelect.querySelector('.select-trigger');
+    const options = translationLanguageSelect.querySelectorAll('.option');
+    const selectedText = trigger.querySelector('span');
+
+    trigger.addEventListener('click', () => {
+      translationLanguageSelect.classList.toggle('open');
     });
+
+    options.forEach(option => {
+      option.addEventListener('click', () => {
+        currentTranslationLanguage = option.dataset.value;
+        selectedText.innerHTML = option.innerHTML;
+        options.forEach(opt => opt.classList.remove('selected'));
+        option.classList.add('selected');
+        translationLanguageSelect.classList.remove('open');
+        
+        // Update translations if analysis is already displayed
+        updateTranslations();
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!translationLanguageSelect.contains(e.target)) {
+        translationLanguageSelect.classList.remove('open');
+      }
+    });
+  }
+
+  function updateTranslations() {
+    const translationElements = document.querySelectorAll('.translation-text');
+    const translationTexts = translations[currentTranslationLanguage];
+    
+    if (translationElements.length > 0 && translationTexts) {
+      translationElements.forEach((element, index) => {
+        if (translationTexts[index]) {
+          element.textContent = translationTexts[index];
+        }
+      });
+    }
+  }
+
+  document.getElementById('analyze-sentiment-button').addEventListener('click', function() {
+  var analysisContainer = document.getElementById('analysis-container');
+  var loadingSpinner = document.getElementById('loading-spinner');
+  var analysisMessage = document.getElementById('analysis-message');
+  var analyzeButton = document.getElementById('analyze-sentiment-button');
+  var analysisTable = document.getElementById('analysis-table');
+
+
+  // Hide button and show loading spinner
+  analyzeButton.style.display = 'none';
+  analysisContainer.style.display = 'block';
+  loadingSpinner.style.display = 'block';
+  analysisMessage.style.display = 'none';
+
+  setTimeout(function() {
+    // Hide loading spinner and show message
+    loadingSpinner.style.display = 'none';
+    analysisMessage.style.display = 'block';
+    analysisTable.style.display = 'block';
+    
+    // Apply translations
+    updateTranslations();
+  }, 4000);
+  });
 });

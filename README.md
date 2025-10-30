@@ -1,33 +1,117 @@
-# Chirp Demo
+# 🎵 Chirp Demo - Google Cloud Speech & TTS Interactive Demo
 
-## Module 1: The Creative Storyteller (TTS Voice Quality & Variety)
+An interactive web application showcasing Google Cloud's advanced Speech-to-Text and Text-to-Speech capabilities through fun singing and learning games.
 
-This demo focuses on the human-like quality and personality of the TTS voices.
+## 🚀 Quick Start
 
-### How it Works
-The user is prompted: "Tell me the beginning of a story."
-They press the "Talk" button and dictate a few sentences, e.g., "In a world made of candy, a gingerbread man set off on a quest to find the legendary chocolate river."
+**Choose your preferred method:**
 
-**On Screen (STT):** Chirp transcribes the story, automatically adding punctuation. The user can see and admire the accuracy.
+### Option A: Docker Container (Isolated Environment)
+```bash
+docker build -t chirp-demo .
+docker run -p 8080:8080 \
+  -e GOOGLE_CLOUD_PROJECT="your-project-id" \
+  -v ~/chirp-demo-credentials.json:/app/credentials.json \
+  -e GOOGLE_APPLICATION_CREDENTIALS="/app/credentials.json" \
+  chirp-demo
+```
 
-**User Choice:** The screen then presents a "Voice Gallery" with profiles for different TTS voices (e.g., "Old Storyteller," "Energetic Youth," "Mysterious Narrator," "British Newsreader"). Each profile could have a fun avatar.
+### Option B: Run Locally on macOS
+```bash
+# Using uv (recommended - fast & modern)
+uv venv && source .venv/bin/activate
+uv pip install -r requirements.txt
+export GOOGLE_CLOUD_PROJECT="your-project-id"
+export GOOGLE_APPLICATION_CREDENTIALS="~/chirp-demo-credentials.json"
+uv run python main.py
+```
 
-The user taps a voice.
+**Access the app at:** http://localhost:8080
 
-**Audio Output (TTS):** The selected voice reads their dictated story back to them with impressive clarity and personality.
+## 📖 Documentation
 
+- **[QUICKSTART_GUIDE.md](QUICKSTART_GUIDE.md)** - Concise setup instructions for both Docker and local installation
+- **[INSTRUCTIONS.md](INSTRUCTIONS.md)** - Comprehensive documentation with detailed troubleshooting
+- **[quickstart.md](quickstart.md)** - Ultra-quick command reference
 
-### Chirp Features Showcased
-* Automatic Punctuation in STT.
-* Superior naturalness and expressiveness of TTS voices.
-* Wide variety of available voices and accents.
+## 🎮 Features
 
+### Module 1: Creative Storyteller (TTS Demo)
+- **Voice Quality & Variety**: Experience human-like TTS voices with distinct personalities
+- **How it works**:
+  1. Click "Talk" and dictate a story beginning
+  2. See real-time transcription with automatic punctuation
+  3. Choose from various voice profiles (Old Storyteller, Energetic Youth, etc.)
+  4. Listen to your story read back with impressive clarity and personality
 
-## Module 2: The Singing Contest (STT)
+### Module 2: Singing Contest (STT Demo)
+- **Real-time Transcription**: Sing along to popular songs and get scored
+- **Features**:
+  - Low-latency streaming transcription
+  - Word-level confidence scoring
+  - Timing and rhythm analysis
+  - High score leaderboard
 
-Have a user sing precisely on top of lyrics (points for match)
+### Module 3: Learning Game
+- **Listen & Type**: Test your listening comprehension
+- **Features**:
+  - Random phrase generation
+  - Accuracy scoring with Levenshtein distance
+  - Time-based bonus points
+  - Competitive leaderboard
 
-### Chirp Features Showcased
-* Low-latency streaming transcription.
-* High accuracy even with rapid speech.
-* Speaker Diarization (an advanced and very impressive feature).
+## 🛠 Technical Highlights
+
+### Chirp STT Features Showcased
+- ✅ Automatic punctuation
+- ✅ Low-latency streaming
+- ✅ High accuracy with rapid speech
+- ✅ Word-level timestamps and confidence scores
+- ✅ Speaker diarization capabilities
+
+### Chirp TTS Features Showcased
+- ✅ Superior naturalness and expressiveness
+- ✅ Multiple voice personalities
+- ✅ Wide variety of accents and styles
+- ✅ Real-time synthesis
+
+## 📋 Prerequisites
+
+1. **Google Cloud Project** with billing enabled
+2. **Enable APIs**:
+   ```bash
+   gcloud services enable speech.googleapis.com texttospeech.googleapis.com
+   ```
+3. **Service Account** with `roles/speech.client` role (use `./setup-iam.sh` for automated setup)
+
+## 🧹 Cleanup
+
+When done with the demo:
+```bash
+# Remove Google Cloud resources
+./cleanup-iam.sh
+
+# Remove Docker image (if used)
+docker rmi chirp-demo
+
+# Remove Python environment (if used)
+rm -rf .venv venv
+```
+
+## 🔧 Development
+
+For development with auto-reload:
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+```
+
+## 📄 License
+
+This is a demonstration project for Google Cloud's Chirp Speech APIs.
+
+## 🆘 Support
+
+For issues or questions, refer to:
+- [Troubleshooting Guide](INSTRUCTIONS.md#troubleshooting)
+- [Google Cloud Speech-to-Text Docs](https://cloud.google.com/speech-to-text/docs)
+- [Google Cloud Text-to-Speech Docs](https://cloud.google.com/text-to-speech/docs)
